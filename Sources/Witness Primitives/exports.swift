@@ -10,4 +10,3 @@
 //
 // ===----------------------------------------------------------------------===//
 
-// No re-exports needed - Witness Primitives is a leaf package

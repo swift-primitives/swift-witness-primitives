@@ -10,10 +10,11 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import SwiftSyntax
+@_spi(RawSyntax) import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftDiagnostics
+import Witness_Macros_Shared
 
 // MARK: - WitnessMacro
 
@@ -80,8 +81,10 @@ extension WitnessMacro: MemberMacro {
         // Generate Action enum
         members.append(generateActionEnum(for: closureProperties))
 
-        // Generate unimplemented static property
-        members.append(generateUnimplemented(for: closureProperties, structName: structDecl.name.text))
+        // NOTE: `unimplemented` is NOT generated here.
+        // Per [API-IMPL-003] totality requirements, primitives MUST NOT use fatalError.
+        // Test-aware `unimplemented` is provided by the foundations layer (swift-witnessess)
+        // which can use Swift Testing's Issue.record for proper test integration.
 
         // Generate Observe accessor struct and property
         members.append(generateObserveStruct(for: closureProperties, structName: structDecl.name.text))
@@ -167,10 +170,10 @@ extension WitnessMacro: ExtensionMacro {
         let witnessExt = try ExtensionDeclSyntax("extension \(type.trimmed): __WitnessProtocol {}")
         extensions.append(witnessExt)
 
-        // Enums also conform to Prism.Accessible for composition support
-        // Uses hoisted __PrismAccessible since Prism.Accessible is a typealias
+        // Enums also conform to Optic.Prism.Accessible for composition support
+        // Uses hoisted __OpticPrismAccessible since Optic.Prism.Accessible is a typealias
         if declaration.is(EnumDeclSyntax.self) {
-            let prismExt = try ExtensionDeclSyntax("extension \(type.trimmed): Algebra_Primitives.__PrismAccessible {}")
+            let prismExt = try ExtensionDeclSyntax("extension \(type.trimmed): Optic_Primitives.__OpticPrismAccessible {}")
             extensions.append(prismExt)
         }
 
@@ -313,7 +316,7 @@ private func generateMethod(for property: ClosureProperty) -> DeclSyntax? {
         return specs.isEmpty ? "" : " " + specs.joined(separator: " ")
     }()
 
-    let returnClause = property.returnType.description.trimmingCharacters(in: .whitespaces) == "Void"
+    let returnClause = property.returnType.trimmedDescription == "Void"
         ? ""
         : " -> \(property.returnType)"
 
@@ -376,10 +379,17 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
         "case .\(property.name): \(index)"
     }.joined(separator: "\n                    ")
 
-    // Generate Case.init(caseIndex:) switch
-    let caseInitCases = properties.enumerated().map { index, property in
-        "case \(index): self = .\(property.name)"
-    }.joined(separator: "\n                    ")
+    // Generate Case.init(__unchecked:_:) switch - last case is default
+    let caseInitCases: String
+    if properties.count == 1 {
+        caseInitCases = "default: self = .\(properties[0].name)"
+    } else {
+        let explicitCases = properties.dropLast().enumerated().map { index, property in
+            "case \(index): self = .\(property.name)"
+        }.joined(separator: "\n                    ")
+        let defaultCase = "default: self = .\(properties.last!.name)"
+        caseInitCases = explicitCases + "\n                    " + defaultCase
+    }
 
     // Generate Action.case property switch
     let actionCaseCases = properties.map { property in
@@ -413,10 +423,9 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
                 }
 
                 @inlinable
-                public init(caseIndex: Int) {
-                    switch caseIndex {
+                public init(__unchecked: Void, _ index: Int) {
+                    switch index {
                     \(raw: caseInitCases)
-                    default: fatalError("Invalid case index \\(caseIndex) for Action.Case")
                     }
                 }
             }
@@ -457,7 +466,7 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
             /// - Parameter keyPath: A key path to a prism in `Prisms`.
             /// - Returns: `true` if this action matches the prism's case.
             @inlinable
-            public func `is`<Value>(_ keyPath: KeyPath<Prisms, Algebra_Primitives.Prism<Action, Value>>) -> Bool {
+            public func `is`<Value>(_ keyPath: KeyPath<Prisms, Optic_Primitives.Optic.Prism<Action, Value>>) -> Bool {
                 Self.prisms[keyPath: keyPath].extract(self) != nil
             }
 
@@ -466,7 +475,7 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
             /// - Parameter keyPath: A key path to a prism in `Prisms`.
             /// - Returns: The extracted value, or `nil` if this action doesn't match.
             @inlinable
-            public subscript<Value>(prism keyPath: KeyPath<Prisms, Algebra_Primitives.Prism<Action, Value>>) -> Value? {
+            public subscript<Value>(prism keyPath: KeyPath<Prisms, Optic_Primitives.Optic.Prism<Action, Value>>) -> Value? {
                 Self.prisms[keyPath: keyPath].extract(self)
             }
         }
@@ -485,8 +494,8 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
     if property.parameters.isEmpty {
         // Case with no associated values - prism to Void
         return """
-        public var \(property.name): Algebra_Primitives.Prism<Action, Void> {
-                    Algebra_Primitives.Prism(
+        public var \(property.name): Optic_Primitives.Optic.Prism<Action, Void> {
+                    Optic_Primitives.Optic.Prism(
                         embed: { _ in .\(property.name) },
                         extract: { if case .\(property.name) = $0 { return () } else { return nil } }
                     )
@@ -495,22 +504,26 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
     } else if property.parameters.count == 1 {
         // Single parameter - prism directly to that type
         let param = property.parameters[0]
-        let paramType = param.type.description.trimmingCharacters(in: .whitespaces)
+        let paramType = param.type.trimmedDescription
         let embedArg = param.label != nil ? "\(param.label!): $0" : "$0"
         let extractPattern = param.label != nil ? "\(param.label!): let v" : "let v"
 
         return """
-        public var \(property.name): Algebra_Primitives.Prism<Action, \(paramType)> {
-                    Algebra_Primitives.Prism(
+        public var \(property.name): Optic_Primitives.Optic.Prism<Action, \(paramType)> {
+                    Optic_Primitives.Optic.Prism(
                         embed: { .\(property.name)(\(embedArg)) },
                         extract: { if case .\(property.name)(\(extractPattern)) = $0 { return v } else { return nil } }
                     )
                 }
         """
     } else {
-        // Multiple parameters - prism to a tuple
+        // Multiple parameters - prism to a labeled tuple
         let tupleTypes = property.parameters.map { param in
-            param.type.description.trimmingCharacters(in: .whitespaces)
+            if let label = param.label {
+                return "\(label): \(param.type.trimmedDescription)"
+            } else {
+                return param.type.trimmedDescription
+            }
         }.joined(separator: ", ")
 
         let embedArgs = property.parameters.enumerated().map { index, param in
@@ -529,11 +542,17 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
             }
         }.joined(separator: ", ")
 
-        let extractTuple = property.parameters.indices.map { "v\($0)" }.joined(separator: ", ")
+        let extractTuple = property.parameters.enumerated().map { index, param in
+            if let label = param.label {
+                return "\(label): v\(index)"
+            } else {
+                return "v\(index)"
+            }
+        }.joined(separator: ", ")
 
         return """
-        public var \(property.name): Algebra_Primitives.Prism<Action, (\(tupleTypes))> {
-                    Algebra_Primitives.Prism(
+        public var \(property.name): Optic_Primitives.Optic.Prism<Action, (\(tupleTypes))> {
+                    Optic_Primitives.Optic.Prism(
                         embed: { .\(property.name)(\(embedArgs)) },
                         extract: { if case .\(property.name)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
                     )
@@ -543,30 +562,12 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
 }
 
 // MARK: - Unimplemented Generation
-
-private func generateUnimplemented(for properties: [ClosureProperty], structName: String) -> DeclSyntax {
-    let closures = properties.map { property in
-        let wildcards = property.parameters.isEmpty
-            ? ""
-            : property.parameters.map { _ in "_" }.joined(separator: ", ")
-
-        let signature = generateMethodSignature(name: property.name, functionType: property.functionType)
-
-        if wildcards.isEmpty {
-            return "\(property.name): { fatalError(\"unimplemented: \(structName).\(signature)\") }"
-        } else {
-            return "\(property.name): { \(wildcards) in fatalError(\"unimplemented: \(structName).\(signature)\") }"
-        }
-    }.joined(separator: ",\n            ")
-
-    return """
-        public static var unimplemented: Self {
-            Self(
-                \(raw: closures)
-            )
-        }
-        """
-}
+//
+// REMOVED: Per [API-IMPL-003] totality requirements, primitives MUST NOT use fatalError.
+// The `unimplemented` feature is now provided by the foundations layer (swift-witnessess)
+// which integrates with Swift Testing's Issue.record for proper test diagnostics.
+//
+// See: swift-witnessess/Sources/Witnesses/Witness.Unimplemented.swift
 
 // MARK: - Observe Accessor Generation
 
@@ -646,7 +647,7 @@ private func generateBothObserveClosure(for property: ClosureProperty, structNam
 
     let awaitKeyword = property.isAsync ? "await " : ""
 
-    let returnType = property.returnType.description.trimmingCharacters(in: .whitespaces)
+    let returnType = property.returnType.trimmedDescription
     let hasReturn = returnType != "Void" && returnType != "()"
     let resultValue = hasReturn ? "result" : "()"
 
@@ -719,7 +720,7 @@ private func generateBeforeObserveClosure(for property: ClosureProperty, structN
     let awaitKeyword = property.isAsync ? "await " : ""
     let tryKeyword = property.isThrowing ? "try " : ""
 
-    let returnType = property.returnType.description.trimmingCharacters(in: .whitespaces)
+    let returnType = property.returnType.trimmedDescription
     let hasReturn = returnType != "Void" && returnType != "()"
     let returnKeyword = hasReturn ? "return " : ""
 
@@ -751,7 +752,7 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
 
     let awaitKeyword = property.isAsync ? "await " : ""
 
-    let returnType = property.returnType.description.trimmingCharacters(in: .whitespaces)
+    let returnType = property.returnType.trimmedDescription
     let hasReturn = returnType != "Void" && returnType != "()"
     let resultValue = hasReturn ? "result" : "()"
 
@@ -822,242 +823,6 @@ private func formatActionConstruction(for property: ClosureProperty) -> String {
         }
     }.joined(separator: ", ")
     return ".\(property.name)(\(args))"
-}
-
-// MARK: - Enum Case Extraction
-
-struct EnumCase {
-    let name: String
-    let parameters: [EnumCaseParameter]
-}
-
-struct EnumCaseParameter {
-    let label: String?
-    let type: TypeSyntax
-}
-
-private func extractEnumCases(from enumDecl: EnumDeclSyntax) -> [EnumCase] {
-    var cases: [EnumCase] = []
-
-    for member in enumDecl.memberBlock.members {
-        guard let caseDecl = member.decl.as(EnumCaseDeclSyntax.self) else {
-            continue
-        }
-
-        for element in caseDecl.elements {
-            let name = element.name.text
-            var parameters: [EnumCaseParameter] = []
-
-            if let parameterClause = element.parameterClause {
-                for param in parameterClause.parameters {
-                    let label = param.firstName?.text
-                    parameters.append(EnumCaseParameter(
-                        label: label,
-                        type: param.type
-                    ))
-                }
-            }
-
-            cases.append(EnumCase(name: name, parameters: parameters))
-        }
-    }
-
-    return cases
-}
-
-// MARK: - Enum Prism Generation
-
-private func generateEnumPrismMembers(for cases: [EnumCase], enumName: String) -> [DeclSyntax] {
-    var members: [DeclSyntax] = []
-
-    // Generate direct computed properties for each case (zero-overhead extraction)
-    for enumCase in cases {
-        members.append(generateEnumComputedProperty(for: enumCase))
-    }
-
-    // Generate Prisms struct
-    let prismProperties = cases.map { enumCase in
-        generateEnumPrismProperty(for: enumCase, enumName: enumName)
-    }.joined(separator: "\n\n        ")
-
-    let prismsStruct: DeclSyntax = """
-        /// Prisms for each enum case, enabling type-safe case matching and extraction.
-        public struct Prisms: Sendable {
-            @inlinable
-            public init() {}
-
-            \(raw: prismProperties)
-        }
-        """
-    members.append(prismsStruct)
-
-    // Generate prisms static property
-    let prismsProperty: DeclSyntax = """
-        /// Access prisms for each enum case.
-        @inlinable
-        public static var prisms: Prisms { Prisms() }
-        """
-    members.append(prismsProperty)
-
-    // Generate is(_:) method
-    let isMethod: DeclSyntax = """
-        /// Checks if this value matches the given prism.
-        ///
-        /// - Parameter keyPath: A key path to a prism in `Prisms`.
-        /// - Returns: `true` if this value matches the prism's case.
-        @inlinable
-        public func `is`<Value>(_ keyPath: KeyPath<Prisms, Algebra_Primitives.Prism<\(raw: enumName), Value>>) -> Bool {
-            Self.prisms[keyPath: keyPath].extract(self) != nil
-        }
-        """
-    members.append(isMethod)
-
-    // Generate subscript[prism:]
-    let prismSubscript: DeclSyntax = """
-        /// Extracts the associated value for the given prism, if this value matches.
-        ///
-        /// - Parameter keyPath: A key path to a prism in `Prisms`.
-        /// - Returns: The extracted value, or `nil` if this value doesn't match.
-        @inlinable
-        public subscript<Value>(prism keyPath: KeyPath<Prisms, Algebra_Primitives.Prism<\(raw: enumName), Value>>) -> Value? {
-            Self.prisms[keyPath: keyPath].extract(self)
-        }
-        """
-    members.append(prismSubscript)
-
-    return members
-}
-
-/// Generates a direct computed property for extracting an enum case's associated value.
-///
-/// This provides zero-overhead extraction compared to prism-based subscripts:
-/// ```swift
-/// // Generated:
-/// var login: Int? {
-///     if case .login(let v) = self { v } else { nil }
-/// }
-///
-/// // Usage:
-/// let value = status.login  // Direct property access, no indirection
-/// ```
-private func generateEnumComputedProperty(for enumCase: EnumCase) -> DeclSyntax {
-    if enumCase.parameters.isEmpty {
-        // Case with no associated values - property returns Void?
-        return """
-            /// Extracts `Void` if this is the `\(raw: enumCase.name)` case, otherwise `nil`.
-            @inlinable
-            public var \(raw: enumCase.name): Void? {
-                if case .\(raw: enumCase.name) = self { () } else { nil }
-            }
-            """
-    } else if enumCase.parameters.count == 1 {
-        // Single parameter - property returns that type directly
-        let param = enumCase.parameters[0]
-        let paramType = param.type.description.trimmingCharacters(in: .whitespaces)
-        let extractPattern = param.label != nil ? "\(param.label!): let v" : "let v"
-
-        return """
-            /// Extracts the associated value if this is the `\(raw: enumCase.name)` case, otherwise `nil`.
-            @inlinable
-            public var \(raw: enumCase.name): \(raw: paramType)? {
-                if case .\(raw: enumCase.name)(\(raw: extractPattern)) = self { v } else { nil }
-            }
-            """
-    } else {
-        // Multiple parameters - property returns a tuple
-        let tupleTypes = enumCase.parameters.map { param in
-            if let label = param.label {
-                return "\(label): \(param.type.description.trimmingCharacters(in: .whitespaces))"
-            } else {
-                return param.type.description.trimmingCharacters(in: .whitespaces)
-            }
-        }.joined(separator: ", ")
-
-        let extractPatterns = enumCase.parameters.enumerated().map { index, param in
-            if let label = param.label {
-                return "\(label): let v\(index)"
-            } else {
-                return "let v\(index)"
-            }
-        }.joined(separator: ", ")
-
-        let extractTuple = enumCase.parameters.enumerated().map { index, param in
-            if let label = param.label {
-                return "\(label): v\(index)"
-            } else {
-                return "v\(index)"
-            }
-        }.joined(separator: ", ")
-
-        return """
-            /// Extracts the associated values if this is the `\(raw: enumCase.name)` case, otherwise `nil`.
-            @inlinable
-            public var \(raw: enumCase.name): (\(raw: tupleTypes))? {
-                if case .\(raw: enumCase.name)(\(raw: extractPatterns)) = self { (\(raw: extractTuple)) } else { nil }
-            }
-            """
-    }
-}
-
-private func generateEnumPrismProperty(for enumCase: EnumCase, enumName: String) -> String {
-    if enumCase.parameters.isEmpty {
-        // Case with no associated values - prism to Void
-        return """
-        public var \(enumCase.name): Algebra_Primitives.Prism<\(enumName), Void> {
-                Algebra_Primitives.Prism(
-                    embed: { _ in .\(enumCase.name) },
-                    extract: { if case .\(enumCase.name) = $0 { return () } else { return nil } }
-                )
-            }
-        """
-    } else if enumCase.parameters.count == 1 {
-        // Single parameter - prism directly to that type
-        let param = enumCase.parameters[0]
-        let paramType = param.type.description.trimmingCharacters(in: .whitespaces)
-        let embedArg = param.label != nil ? "\(param.label!): $0" : "$0"
-        let extractPattern = param.label != nil ? "\(param.label!): let v" : "let v"
-
-        return """
-        public var \(enumCase.name): Algebra_Primitives.Prism<\(enumName), \(paramType)> {
-                Algebra_Primitives.Prism(
-                    embed: { .\(enumCase.name)(\(embedArg)) },
-                    extract: { if case .\(enumCase.name)(\(extractPattern)) = $0 { return v } else { return nil } }
-                )
-            }
-        """
-    } else {
-        // Multiple parameters - prism to a tuple
-        let tupleTypes = enumCase.parameters.map { param in
-            param.type.description.trimmingCharacters(in: .whitespaces)
-        }.joined(separator: ", ")
-
-        let embedArgs = enumCase.parameters.enumerated().map { index, param in
-            if let label = param.label {
-                return "\(label): $0.\(index)"
-            } else {
-                return "$0.\(index)"
-            }
-        }.joined(separator: ", ")
-
-        let extractPatterns = enumCase.parameters.enumerated().map { index, param in
-            if let label = param.label {
-                return "\(label): let v\(index)"
-            } else {
-                return "let v\(index)"
-            }
-        }.joined(separator: ", ")
-
-        let extractTuple = enumCase.parameters.indices.map { "v\($0)" }.joined(separator: ", ")
-
-        return """
-        public var \(enumCase.name): Algebra_Primitives.Prism<\(enumName), (\(tupleTypes))> {
-                Algebra_Primitives.Prism(
-                    embed: { .\(enumCase.name)(\(embedArgs)) },
-                    extract: { if case .\(enumCase.name)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
-                )
-            }
-        """
-    }
 }
 
 // MARK: - Diagnostics

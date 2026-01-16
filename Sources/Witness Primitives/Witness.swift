@@ -15,7 +15,7 @@
 /// A protocol witness is a struct with closure properties that represents a capability
 /// or interface. This pattern enables:
 /// - Platform-specific implementations (darwin, linux, windows)
-/// - Test doubles (unimplemented, mock, spy)
+/// - Test doubles (mock, spy, recorded) - see `swift-witnessess` foundations layer
 /// - Middleware composition (logging, tracing, retrying)
 ///
 /// ## Example
@@ -59,8 +59,9 @@ extension Witness {
     /// generates conformance along with:
     /// - Methods with argument labels (for closures with labeled parameters)
     /// - An `Action` enum for observation and middleware
-    /// - An `unimplemented` static property for testing
-    /// - An `observe` method for wrapping with observers
+    /// - An `observe` accessor for wrapping with observers
+    ///
+    /// > Note: Test-aware `unimplemented` witnesses are provided by `swift-witnessess`.
     ///
     /// ## Manual Conformance
     ///

@@ -18,8 +18,11 @@
 /// Apply `@Witness` to a struct containing closure properties to automatically generate:
 /// - **Methods** with argument labels for closures that have labeled parameters
 /// - **Action enum** with cases for each closure, useful for observation/middleware
-/// - **`unimplemented`** static property that fatally errors (for testing)
-/// - **`observe`** method to wrap the witness with an observer
+/// - **`observe`** accessor to wrap the witness with observers
+///
+/// > Note: Test-aware `unimplemented` witnesses are provided by the foundations layer
+/// > (`swift-witnessess`), not by this macro. This ensures primitives remain total per
+/// > [API-IMPL-003].
 ///
 /// ## Basic Usage
 ///
@@ -81,7 +84,7 @@
 /// ```
 @attached(member, names: arbitrary)
 @attached(memberAttribute)
-@attached(extension, conformances: __WitnessProtocol, Algebra_Primitives.__PrismAccessible)
+@attached(extension, conformances: __WitnessProtocol, Optic_Primitives.__OpticPrismAccessible)
 public macro Witness() = #externalMacro(
     module: "Witness_Macros_Implementation",
     type: "WitnessMacro"

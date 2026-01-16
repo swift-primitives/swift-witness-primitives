@@ -22,6 +22,10 @@ let package = Package(
             targets: ["Witness Macros"]
         ),
         .library(
+            name: "Witness Macros Shared",
+            targets: ["Witness Macros Shared"]
+        ),
+        .library(
             name: "Witness Primitives Test Support",
             targets: ["Witness Primitives Test Support"]
         ),
@@ -30,6 +34,8 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0"),
         .package(path: "../swift-algebra-primitives"),
         .package(path: "../swift-finite-primitives"),
+        .package(path: "../swift-optic-primitives"),
+        .package(path: "../swift-standard-library-extensions"),
     ],
     targets: [
         .target(
@@ -42,11 +48,21 @@ let package = Package(
                 "Witness Macros Implementation",
                 .product(name: "Algebra Primitives", package: "swift-algebra-primitives"),
                 .product(name: "Finite Primitives", package: "swift-finite-primitives"),
+                .product(name: "Optic Primitives", package: "swift-optic-primitives"),
+            ]
+        ),
+        .target(
+            name: "Witness Macros Shared",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
             ]
         ),
         .macro(
             name: "Witness Macros Implementation",
             dependencies: [
+                "Witness Macros Shared",
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
