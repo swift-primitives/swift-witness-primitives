@@ -11,19 +11,20 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Witness_Primitives
+import Testing_Extras
+@testable import Witness_Primitives
 
-// MARK: - Tests
+extension Witness {
+    #TestSuites
+}
 
-@Suite("Witness Primitives")
-struct WitnessPrimitivesTests {
+// MARK: - Unit Tests
 
-    @Test("Witness namespace exists")
-    func witnessNamespaceExists() {
-        // Verify the Witness enum exists and can be used as a namespace
+extension Witness.Test.Unit {
+    @Test("namespace exists and can be used for type containment")
+    func namespaceExists() {
         func acceptWitnessProtocol<T: Witness.`Protocol`>(_ type: T.Type) {}
 
-        // Manual conformance should work
         struct ManualWitness: Witness.`Protocol` {
             var operation: @Sendable () -> Void
         }
@@ -31,22 +32,22 @@ struct WitnessPrimitivesTests {
         acceptWitnessProtocol(ManualWitness.self)
     }
 
-    @Test("Witness.`Protocol` is a marker protocol")
-    func witnessProtocolIsMarker() {
-        // Verify the protocol has no requirements beyond Sendable
+    @Test("Witness.Protocol is a marker protocol with no requirements beyond Sendable")
+    func protocolIsMarker() {
         struct MinimalWitness: Witness.`Protocol` {}
 
-        // Should compile and be Sendable
         let witness: any Sendable = MinimalWitness()
         _ = witness
     }
+}
 
+// MARK: - Edge Cases
+
+extension Witness.Test.EdgeCase {
     @Test("__WitnessProtocol typealias exists for macro use")
-    func witnessProtocolTypealiasExists() {
-        // Verify the internal typealias exists
-        func acceptWitnessProtocol<T: __WitnessProtocol>(_ type: T.Type) {}
-
+    func typealiasExists() {
+        func accept<T: __WitnessProtocol>(_ type: T.Type) {}
         struct TestWitness: __WitnessProtocol {}
-        acceptWitnessProtocol(TestWitness.self)
+        accept(TestWitness.self)
     }
 }
