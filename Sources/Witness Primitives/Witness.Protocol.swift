@@ -10,6 +10,8 @@
 //
 // ===----------------------------------------------------------------------===//
 
+public import Dependency_Primitives
+
 extension Witness {
     /// Marker protocol for struct-with-closures types that represent capabilities.
     ///
@@ -31,5 +33,37 @@ extension Witness {
     ///     var fetch: (String) async throws -> Data
     /// }
     /// ```
+    ///
+    /// ## Dependency Injection
+    ///
+    /// Witnesses that have live/test variants can also conform to
+    /// ``Dependency/Key`` for formal dependency injection support:
+    ///
+    /// ```swift
+    /// struct FileSystem: Witness.Protocol, Dependency.Key {
+    ///     var read: (String) async throws -> Data
+    ///     var write: (String, Data) async throws -> Void
+    ///
+    ///     static var liveValue: Self { .darwin }
+    ///     static var testValue: Self { .mock }
+    /// }
+    ///
+    /// // Usage with Dependency.Scope
+    /// Dependency.Scope.with { values in
+    ///     values[FileSystem.self] = .mock
+    /// } operation: {
+    ///     let fs = Dependency.Scope.current[FileSystem.self]
+    ///     // Uses .mock
+    /// }
+    /// ```
     public protocol `Protocol`: Sendable {}
+
+    /// Type alias for dependency injection key protocol.
+    ///
+    /// Use `Witness.DependencyKey` or `Dependency.Key` interchangeably for
+    /// witnesses that support dependency injection.
+    ///
+    /// > Note: Renamed from `Key` to avoid conflict with `Witness.Key` protocol
+    /// > defined in swift-witnesses.
+    public typealias DependencyKey = Dependency.Key
 }

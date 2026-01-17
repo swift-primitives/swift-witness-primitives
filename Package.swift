@@ -19,10 +19,14 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../../swift-foundations/swift-testing-extras"),
+        .package(path: "../swift-dependency-primitives"),
     ],
     targets: [
         .target(
-            name: "Witness Primitives"
+            name: "Witness Primitives",
+            dependencies: [
+                .product(name: "Dependency Primitives", package: "swift-dependency-primitives"),
+            ]
         ),
         .testTarget(
             name: "Witness Primitives Tests",
