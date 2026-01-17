@@ -22,7 +22,7 @@ extension Witness {
     /// - An `Action` enum for observation and middleware
     /// - An `observe` accessor for wrapping with observers
     ///
-    /// > Note: Test-aware `unimplemented` witnesses are provided by `swift-witnessess`.
+    /// > Note: Test-aware `unimplemented` witnesses are provided by `swift-witnesses`.
     ///
     /// ## Manual Conformance
     ///

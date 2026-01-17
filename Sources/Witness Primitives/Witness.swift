@@ -15,7 +15,7 @@
 /// A protocol witness is a struct with closure properties that represents a capability
 /// or interface. This pattern enables:
 /// - Platform-specific implementations (darwin, linux, windows)
-/// - Test doubles (mock, spy, recorded) - see `swift-witnessess` foundations layer
+/// - Test doubles (mock, spy, recorded) - see `swift-witnesses` foundations layer
 /// - Middleware composition (logging, tracing, retrying)
 ///
 /// ## Example
