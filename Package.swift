@@ -26,6 +26,12 @@ let package = Package(
             dependencies: [
                 .product(name: "Dependency Primitives", package: "swift-dependency-primitives")
             ]
+        ),
+        .testTarget(
+            name: "Witness Primitives Tests",
+            dependencies: [
+                "Witness Primitives"
+            ]
         )
     ],
     swiftLanguageModes: [.v6]

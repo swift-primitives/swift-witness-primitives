@@ -11,18 +11,21 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Testing
 @testable import Witness_Primitives
 
 extension Witness {
-    #Tests
+    @Suite
+    struct Test {
+        @Suite struct Unit {}
+        @Suite struct EdgeCase {}
+    }
 }
 
 // MARK: - Unit Tests
 
 extension Witness.Test.Unit {
-    @Test("namespace exists and can be used for type containment")
-    func namespaceExists() {
+    @Test
+    func `namespace exists and can be used for type containment`() {
         func acceptWitnessProtocol<T: Witness.`Protocol`>(_ type: T.Type) {}
 
         struct ManualWitness: Witness.`Protocol` {
@@ -32,8 +35,8 @@ extension Witness.Test.Unit {
         acceptWitnessProtocol(ManualWitness.self)
     }
 
-    @Test("Witness.Protocol is a marker protocol with no requirements beyond Sendable")
-    func protocolIsMarker() {
+    @Test
+    func `Witness.Protocol is a marker protocol with no requirements beyond Sendable`() {
         struct MinimalWitness: Witness.`Protocol` {}
 
         let witness: any Sendable = MinimalWitness()
@@ -44,8 +47,8 @@ extension Witness.Test.Unit {
 // MARK: - Edge Cases
 
 extension Witness.Test.EdgeCase {
-    @Test("__WitnessProtocol typealias exists for macro use")
-    func typealiasExists() {
+    @Test
+    func `__WitnessProtocol typealias exists for macro use`() {
         func accept<T: __WitnessProtocol>(_ type: T.Type) {}
         struct TestWitness: __WitnessProtocol {}
         accept(TestWitness.self)
