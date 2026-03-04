@@ -36,11 +36,10 @@ extension Witness.Test.Unit {
     }
 
     @Test
-    func `Witness.Protocol is a marker protocol with no requirements beyond Sendable`() {
+    func `Witness.Protocol is a pure marker protocol with no requirements`() {
         struct MinimalWitness: Witness.`Protocol` {}
 
-        let witness: any Sendable = MinimalWitness()
-        _ = witness
+        let _: any Witness.`Protocol` = MinimalWitness()
     }
 }
 

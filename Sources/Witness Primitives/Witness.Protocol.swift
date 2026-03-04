@@ -56,7 +56,7 @@ extension Witness {
     ///     // Uses .mock
     /// }
     /// ```
-    public protocol `Protocol`: Sendable {}
+    public protocol `Protocol` {}
 
     /// Type alias for dependency injection key protocol.
     ///
