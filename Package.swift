@@ -1,15 +1,15 @@
-// swift-tools-version: 6.3.3
+// swift-tools-version: 6.4
 
 import PackageDescription
 
 let package = Package(
     name: "swift-witness-primitives",
     platforms: [
-        .macOS("27"),
-        .iOS("27"),
-        .tvOS("27"),
-        .watchOS("27"),
-        .visionOS("27")
+        .macOS(.v27),
+        .iOS(.v27),
+        .tvOS(.v27),
+        .watchOS(.v27),
+        .visionOS(.v27),
     ],
     products: [
         .library(
@@ -22,20 +22,29 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/swift-primitives/swift-standard-library-extensions.git", branch: "main"),
+        .package(
+            url: "https://github.com/swift-primitives/swift-standard-library-extensions.git",
+            branch: "main"
+        )
     ],
     targets: [
         .target(
             name: "Witness Primitives",
             dependencies: [
-                .product(name: "Standard Library Extensions", package: "swift-standard-library-extensions"),
+                .product(
+                    name: "Standard Library Extensions",
+                    package: "swift-standard-library-extensions"
+                )
             ]
         ),
         .target(
             name: "Witness Primitives Test Support",
             dependencies: [
                 "Witness Primitives",
-                .product(name: "Standard Library Extensions Test Support", package: "swift-standard-library-extensions"),
+                .product(
+                    name: "Standard Library Extensions Test Support",
+                    package: "swift-standard-library-extensions"
+                ),
             ],
             path: "Tests/Support"
         ),
@@ -45,7 +54,7 @@ let package = Package(
                 "Witness Primitives",
                 "Witness Primitives Test Support",
             ]
-        )
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
