@@ -1,15 +1,3 @@
-// ===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-primitives open source project
-//
-// Copyright (c) 2024-2025 Coen ten Thije Boonkkamp and the swift-primitives
-// project authors
-// Licensed under Apache License v2.0
-//
-// See LICENSE for license information
-//
-// ===----------------------------------------------------------------------===//
-
 import Testing
 
 @testable import Witness_Primitives
@@ -21,8 +9,6 @@ extension Witness {
         @Suite struct `Edge Case` {}
     }
 }
-
-// MARK: - Unit Tests
 
 extension Witness.Test.Unit {
     @Test
@@ -43,8 +29,6 @@ extension Witness.Test.Unit {
         let _: any Witness.`Protocol` = Fixture()
     }
 }
-
-// MARK: - Edge Cases
 
 extension Witness.Test.`Edge Case` {
     @Test
